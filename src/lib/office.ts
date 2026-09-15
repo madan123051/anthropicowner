@@ -59,7 +59,6 @@ export type OfficeState = {
 };
 
 const KEY = "anthropic-owner-office-v1";
-const VISITOR_KEY = "ao-visitor-id";
 
 export function emptyOffice(): OfficeState {
   return { visitors: [], decrees: [] };
@@ -88,20 +87,6 @@ export function saveOffice(state: OfficeState) {
       decrees: state.decrees.slice(0, 16),
     }),
   );
-}
-
-export function getVisitorId(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    let id = window.localStorage.getItem(VISITOR_KEY);
-    if (!id || id.length < 8) {
-      id = window.crypto.randomUUID();
-      window.localStorage.setItem(VISITOR_KEY, id);
-    }
-    return id;
-  } catch {
-    return `anon-${Date.now()}`;
-  }
 }
 
 export function makeSerial(name: string, at: Date): string {

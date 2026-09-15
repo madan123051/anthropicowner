@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import {
   HOLDINGS,
-  getVisitorId,
   loadOffice,
   makeSerial,
   occupancyDays,
@@ -15,12 +14,7 @@ import {
   type Decree,
   type Visitor,
 } from "@/lib/office";
-import {
-  createAudience,
-  createDecree,
-  getPublicLedger,
-  recordVisit,
-} from "@/lib/office-server";
+import { createAudience, createDecree, getPublicLedger, startVisitorTracking } from "@/lib/office-data";
 import { cn } from "@/lib/utils";
 
 export function OfficePage() {
@@ -43,17 +37,22 @@ export function OfficePage() {
     const tick = () => setNow(new Date());
     tick();
     const id = window.setInterval(tick, 1000);
-    const visitorId = getVisitorId();
-    if (visitorId) {
-      void recordVisit({ data: { visitorId } }).catch(() => undefined);
-    }
+    let stopTracking: (() => void) | undefined;
+    void startVisitorTracking()
+      .then((stop) => {
+        stopTracking = stop;
+      })
+      .catch(() => undefined);
     void getPublicLedger()
       .then((ledger) => {
         setVisitors(ledger.audiences);
         setDecrees(ledger.decrees);
       })
       .catch(() => undefined);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      stopTracking?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -62,10 +61,9 @@ export function OfficePage() {
   }, [visitors, decrees, ready]);
 
   const trimmed = name.trim();
-  const previewDate = now ?? new Date(0);
   const serial = useMemo(
-    () => (trimmed ? makeSerial(trimmed, previewDate) : "AO-————-————"),
-    [trimmed, previewDate],
+    () => (trimmed ? makeSerial(trimmed, now ?? new Date(0)) : "AO-————-————"),
+    [trimmed, now],
   );
   const title = trimmed ? pickTitle(trimmed) : "Title to be assigned";
   const stamped = Boolean(stampedName && stampedName === trimmed);
@@ -90,9 +88,7 @@ export function OfficePage() {
     setNotice("Audience recorded. The seal is dry.");
     setRemark("");
     try {
-      const saved = await createAudience({
-        data: { name: trimmed, remark: local.remark },
-      });
+      const saved = await createAudience({ name: trimmed, remark: local.remark });
       setVisitors((prev) => {
         const without = prev.filter((row) => row.serial !== local.serial);
         return [saved, ...without].slice(0, 24);
@@ -114,7 +110,7 @@ export function OfficePage() {
     setDecree("");
     setDecreeNotice("Entered in the minute-book. Enforcement is not among our duties.");
     try {
-      const saved = await createDecree({ data: { text } });
+      const saved = await createDecree({ text });
       setDecrees((prev) => {
         const without = prev.filter((row) => row.at !== local.at);
         return [saved, ...without].slice(0, 16);

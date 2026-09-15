@@ -13,7 +13,7 @@ import { Crest } from "@/components/crest";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getAdminSession, loginAdmin, logoutAdmin } from "@/lib/admin-auth";
-import { getDashboard, type Dashboard } from "@/lib/office-server";
+import { subscribeDashboard, type Dashboard } from "@/lib/office-data";
 import { cn } from "@/lib/utils";
 
 type Gate = "checking" | "locked" | "open";
@@ -47,30 +47,14 @@ export function AdminPage() {
 
   useEffect(() => {
     if (gate !== "open") return;
-    let cancelled = false;
-    async function tick() {
-      try {
-        const next = await getDashboard();
-        if (cancelled) return;
-        if (!next.ok) {
-          setGate("locked");
-          setData(null);
-          return;
-        }
-        setData(next.data);
+    return subscribeDashboard(
+      (next) => {
+        setData(next);
         setError(null);
         setUpdatedAt(new Date());
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "The ledger did not answer.");
-      }
-    }
-    void tick();
-    const id = window.setInterval(() => void tick(), 10_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
+      },
+      (err) => setError(err.message || "The ledger did not answer."),
+    );
   }, [gate]);
 
   async function signOut() {
@@ -120,7 +104,7 @@ export function AdminPage() {
         </h1>
         <p className="mt-4 max-w-xl text-muted">
           Unique visitors and page views, with the ceremonial roll and
-          minute-book. Figures refresh every ten seconds.
+          minute-book. Figures update in real time.
         </p>
 
         {error ? (
@@ -147,6 +131,8 @@ export function AdminPage() {
           />
         </section>
         <p className="mt-3 text-sm text-muted tabular-nums">
+          Online now · {data ? data.online : "—"}
+          <span className="text-fg/30"> · </span>
           All time · {data ? data.uniqueAll : "—"}{" "}
           {data?.uniqueAll === 1 ? "person" : "people"} · {data ? data.viewsAll : "—"}{" "}
           {data?.viewsAll === 1 ? "view" : "views"}

@@ -1,0 +1,103 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "analytics": {
+      ".read": "auth != null",
+      "totalViews": {
+        ".write": "auth != null && newData.isNumber() && ((!data.exists() && newData.val() === 1) || newData.val() === data.val() + 1)",
+        ".validate": "newData.val() >= 0"
+      },
+      "uniqueVisitors": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && newData.val() === true",
+          ".validate": "newData.val() === true"
+        }
+      },
+      "days": {
+        "$key": {
+          ".validate": "$key.matches(/^\\d{4}-\\d{2}-\\d{2}$/)",
+          "views": {
+            ".write": "auth != null && newData.isNumber() && ((!data.exists() && newData.val() === 1) || newData.val() === data.val() + 1)",
+            ".validate": "newData.val() >= 0"
+          },
+          "visitors": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && newData.val() === true",
+              ".validate": "newData.val() === true"
+            }
+          },
+          "$other": { ".validate": false }
+        }
+      },
+      "months": {
+        "$key": {
+          ".validate": "$key.matches(/^\\d{4}-\\d{2}$/)",
+          "views": {
+            ".write": "auth != null && newData.isNumber() && ((!data.exists() && newData.val() === 1) || newData.val() === data.val() + 1)",
+            ".validate": "newData.val() >= 0"
+          },
+          "visitors": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && newData.val() === true",
+              ".validate": "newData.val() === true"
+            }
+          },
+          "$other": { ".validate": false }
+        }
+      },
+      "years": {
+        "$key": {
+          ".validate": "$key.matches(/^\\d{4}$/)",
+          "views": {
+            ".write": "auth != null && newData.isNumber() && ((!data.exists() && newData.val() === 1) || newData.val() === data.val() + 1)",
+            ".validate": "newData.val() >= 0"
+          },
+          "visitors": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && newData.val() === true",
+              ".validate": "newData.val() === true"
+            }
+          },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "presence": {
+      ".read": "auth != null",
+      "$sessionId": {
+        ".write": "auth != null && ((!data.exists() && newData.child('uid').val() === auth.uid) || (data.child('uid').val() === auth.uid && !newData.exists()))",
+        ".validate": "!newData.exists() || newData.hasChildren(['uid', 'connectedAt'])",
+        "uid": { ".validate": "newData.val() === auth.uid" },
+        "connectedAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+    "office": {
+      ".read": "auth != null",
+      "audiences": {
+        "$id": {
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.hasChildren(['name', 'remark', 'title', 'serial', 'at'])",
+          "name": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 48" },
+          "remark": { ".validate": "newData.isString() && newData.val().length <= 140" },
+          "title": { ".validate": "newData.isString() && newData.val().length <= 80" },
+          "serial": { ".validate": "newData.isString() && newData.val().length <= 32" },
+          "at": { ".validate": "newData.isString()" },
+          "$other": { ".validate": false }
+        },
+        ".indexOn": ["at"]
+      },
+      "decrees": {
+        "$id": {
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.hasChildren(['text', 'at'])",
+          "text": { ".validate": "newData.isString() && newData.val().length >= 4 && newData.val().length <= 160" },
+          "at": { ".validate": "newData.isString()" },
+          "$other": { ".validate": false }
+        },
+        ".indexOn": ["at"]
+      }
+    }
+  }
+}
