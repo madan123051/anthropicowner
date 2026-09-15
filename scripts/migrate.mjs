@@ -19,6 +19,12 @@ import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
+if (process.env.VERCEL) {
+  console.log(
+    "[migrate] Vercel build — skipping. Schema applies on the first live request.",
+  );
+  process.exit(0);
+}
 if (!databaseUrl) {
   console.log(
     "[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).",
@@ -86,7 +92,9 @@ async function main() {
 
 main().catch((err) => {
   const code = err?.code;
+  const message = String(err?.message || err);
   const unreachable =
+    /timeout|timed out|ENETUNREACH|ECONNREFUSED|ENOTFOUND|ETIMEDOUT/i.test(message) ||
     code === "ETIMEDOUT" ||
     code === "ENETUNREACH" ||
     code === "ECONNREFUSED" ||
