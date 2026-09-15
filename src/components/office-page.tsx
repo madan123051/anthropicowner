@@ -1,10 +1,12 @@
 import { format } from "date-fns";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import { Crest } from "@/components/crest";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import {
   HOLDINGS,
+  getVisitorId,
   loadOffice,
   makeSerial,
   occupancyDays,
@@ -13,6 +15,12 @@ import {
   type Decree,
   type Visitor,
 } from "@/lib/office";
+import {
+  createAudience,
+  createDecree,
+  getPublicLedger,
+  recordVisit,
+} from "@/lib/office-server";
 import { cn } from "@/lib/utils";
 
 export function OfficePage() {
@@ -35,6 +43,16 @@ export function OfficePage() {
     const tick = () => setNow(new Date());
     tick();
     const id = window.setInterval(tick, 1000);
+    const visitorId = getVisitorId();
+    if (visitorId) {
+      void recordVisit({ data: { visitorId } }).catch(() => undefined);
+    }
+    void getPublicLedger()
+      .then((ledger) => {
+        setVisitors(ledger.audiences);
+        setDecrees(ledger.decrees);
+      })
+      .catch(() => undefined);
     return () => window.clearInterval(id);
   }, []);
 
@@ -53,37 +71,57 @@ export function OfficePage() {
   const stamped = Boolean(stampedName && stampedName === trimmed);
   const days = now ? occupancyDays(now) : null;
 
-  function recordAudience(event: FormEvent) {
+  async function recordAudience(event: FormEvent) {
     event.preventDefault();
     if (trimmed.length < 2) {
       setNotice("A name of at least two letters, if you please.");
       return;
     }
     const at = new Date();
-    const visitor: Visitor = {
+    const local: Visitor = {
       name: trimmed,
       remark: remark.trim(),
       title: pickTitle(trimmed),
       at: at.toISOString(),
       serial: makeSerial(trimmed, at),
     };
-    setVisitors((prev) => [visitor, ...prev].slice(0, 24));
+    setVisitors((prev) => [local, ...prev].slice(0, 24));
     setStampedName(trimmed);
     setNotice("Audience recorded. The seal is dry.");
     setRemark("");
+    try {
+      const saved = await createAudience({
+        data: { name: trimmed, remark: local.remark },
+      });
+      setVisitors((prev) => {
+        const without = prev.filter((row) => row.serial !== local.serial);
+        return [saved, ...without].slice(0, 24);
+      });
+    } catch {
+      setNotice("Audience kept at this desk. The central ledger did not answer.");
+    }
   }
 
-  function enterDecree(event: FormEvent) {
+  async function enterDecree(event: FormEvent) {
     event.preventDefault();
     const text = decree.trim();
     if (text.length < 4) {
       setDecreeNotice("A decree needs at least a sentence.");
       return;
     }
-    const entry: Decree = { text, at: new Date().toISOString() };
-    setDecrees((prev) => [entry, ...prev].slice(0, 16));
+    const local: Decree = { text, at: new Date().toISOString() };
+    setDecrees((prev) => [local, ...prev].slice(0, 16));
     setDecree("");
     setDecreeNotice("Entered in the minute-book. Enforcement is not among our duties.");
+    try {
+      const saved = await createDecree({ data: { text } });
+      setDecrees((prev) => {
+        const without = prev.filter((row) => row.at !== local.at);
+        return [saved, ...without].slice(0, 16);
+      });
+    } catch {
+      setDecreeNotice("Kept in this minute-book. The central ledger did not answer.");
+    }
   }
 
   return (
@@ -557,7 +595,13 @@ function SiteFooter() {
             parody office for a domain, maintained with unusual dignity.
           </p>
         </div>
-        <p className="text-sm text-muted">Office opened 18 January 2024</p>
+        <p className="text-sm text-muted">
+          Office opened 18 January 2024
+          <span className="text-fg/30"> · </span>
+          <Link to="/admin" className="text-muted transition-colors duration-150 hover:text-fg">
+            Ledger
+          </Link>
+        </p>
       </div>
     </footer>
   );
