@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Bar,
@@ -10,21 +10,54 @@ import {
   YAxis,
 } from "recharts";
 import { Crest } from "@/components/crest";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { getAdminSession, loginAdmin, logoutAdmin } from "@/lib/admin-auth";
 import { getDashboard, type Dashboard } from "@/lib/office-server";
 import { cn } from "@/lib/utils";
 
+type Gate = "checking" | "locked" | "open";
+
 export function AdminPage() {
+  const [gate, setGate] = useState<Gate>("checking");
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    async function boot() {
+      try {
+        const session = await getAdminSession();
+        if (cancelled) return;
+        if (!session.signedIn) {
+          setGate("locked");
+          return;
+        }
+        setGate("open");
+      } catch {
+        if (!cancelled) setGate("locked");
+      }
+    }
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (gate !== "open") return;
+    let cancelled = false;
     async function tick() {
       try {
         const next = await getDashboard();
         if (cancelled) return;
-        setData(next);
+        if (!next.ok) {
+          setGate("locked");
+          setData(null);
+          return;
+        }
+        setData(next.data);
         setError(null);
         setUpdatedAt(new Date());
       } catch (err) {
@@ -38,7 +71,23 @@ export function AdminPage() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [gate]);
+
+  async function signOut() {
+    await logoutAdmin();
+    setGate("locked");
+    setData(null);
+    setUpdatedAt(null);
+  }
+
+  if (gate !== "open") {
+    return (
+      <LoginGate
+        checking={gate === "checking"}
+        onUnlock={() => setGate("open")}
+      />
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-bg text-fg">
@@ -48,15 +97,17 @@ export function AdminPage() {
             <Crest className="size-8" />
             <span className="font-display text-lg leading-none">Office ledger</span>
           </Link>
-          <p className="flex items-center gap-2 text-xs text-muted">
-            <span
-              className="size-1.5 rounded-full bg-accent"
-              aria-hidden
-            />
-            <span className="tabular-nums">
-              {updatedAt ? `Live · ${format(updatedAt, "HH:mm:ss")}` : "Connecting"}
-            </span>
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="flex items-center gap-2 text-xs text-muted">
+              <span className="size-1.5 rounded-full bg-accent" aria-hidden />
+              <span className="tabular-nums">
+                {updatedAt ? `Live · ${format(updatedAt, "HH:mm:ss")}` : "Connecting"}
+              </span>
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => void signOut()}>
+              Sign out
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -184,6 +235,104 @@ export function AdminPage() {
             )}
           </div>
         </section>
+      </main>
+    </div>
+  );
+}
+
+function LoginGate({
+  checking,
+  onUnlock,
+}: {
+  checking: boolean;
+  onUnlock: () => void;
+}) {
+  const [id, setId] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await loginAdmin({ data: { id, password } });
+      if (!result.ok) {
+        setNotice(
+          result.reason === "unset"
+            ? "The lock has not been fitted. Set ADMIN_ID and ADMIN_PASSWORD."
+            : "The desk does not recognize those papers.",
+        );
+        return;
+      }
+      onUnlock();
+    } catch {
+      setNotice("The lock did not answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="min-h-dvh bg-bg text-fg">
+      <header className="border-b border-fg/10">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-8">
+          <Link to="/" className="flex items-center gap-2.5 text-fg">
+            <Crest className="size-8" />
+            <span className="font-display text-lg leading-none">Office ledger</span>
+          </Link>
+        </div>
+      </header>
+      <main className="mx-auto flex max-w-md flex-col px-5 py-16 sm:px-8">
+        <p className="font-sans text-xs tracking-widest text-muted uppercase">
+          Private desk
+        </p>
+        <h1 className="mt-3 font-display text-4xl leading-tight">Open the ledger</h1>
+        <p className="mt-4 text-muted">
+          Identity and password as filed with the office. The roll is not public.
+        </p>
+        {checking ? (
+          <p className="mt-10 text-sm text-muted">Checking the lock…</p>
+        ) : (
+          <form className="mt-10 space-y-5" onSubmit={(event) => void onSubmit(event)}>
+            <div>
+              <label htmlFor="admin-id" className="text-sm text-muted">
+                Identity
+              </label>
+              <Input
+                id="admin-id"
+                name="username"
+                autoComplete="username"
+                value={id}
+                onChange={(event) => setId(event.target.value)}
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <label htmlFor="admin-password" className="text-sm text-muted">
+                Password
+              </label>
+              <Input
+                id="admin-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="mt-2"
+              />
+            </div>
+            {notice ? (
+              <p className="text-sm text-muted" role="status">
+                {notice}
+              </p>
+            ) : null}
+            <Button type="submit" id="admin-login" disabled={busy}>
+              {busy ? "Turning the key…" : "Enter"}
+            </Button>
+          </form>
+        )}
       </main>
     </div>
   );

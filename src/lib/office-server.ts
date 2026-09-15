@@ -156,7 +156,11 @@ export const getPublicLedger = createServerFn({ method: "GET" }).handler(
 );
 
 export const getDashboard = createServerFn({ method: "GET" }).handler(
-  async (): Promise<Dashboard> => {
+  async (): Promise<{ ok: false } | { ok: true; data: Dashboard }> => {
+    const { readAdminSession } = await import("@/lib/admin-auth");
+    const session = await readAdminSession();
+    if (!session) return { ok: false };
+
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     const stats = await sql<{
@@ -220,30 +224,33 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(
       limit 50
     `;
     return {
-      viewsToday: asCount(s?.views_today),
-      viewsMonth: asCount(s?.views_month),
-      viewsYear: asCount(s?.views_year),
-      viewsAll: asCount(s?.views_all),
-      uniqueToday: asCount(s?.unique_today),
-      uniqueMonth: asCount(s?.unique_month),
-      uniqueYear: asCount(s?.unique_year),
-      uniqueAll: asCount(s?.unique_all),
-      series: lastFourteenDays().map((day) => ({
-        day,
-        views: byDay.get(day)?.views ?? 0,
-        uniques: byDay.get(day)?.uniques ?? 0,
-      })),
-      audiences: audienceRows.map((row) => ({
-        name: row.name,
-        remark: row.remark,
-        title: row.title,
-        serial: row.serial,
-        at: asIso(row.created_at),
-      })),
-      decrees: decreeRows.map((row) => ({
-        text: row.body,
-        at: asIso(row.created_at),
-      })),
+      ok: true,
+      data: {
+        viewsToday: asCount(s?.views_today),
+        viewsMonth: asCount(s?.views_month),
+        viewsYear: asCount(s?.views_year),
+        viewsAll: asCount(s?.views_all),
+        uniqueToday: asCount(s?.unique_today),
+        uniqueMonth: asCount(s?.unique_month),
+        uniqueYear: asCount(s?.unique_year),
+        uniqueAll: asCount(s?.unique_all),
+        series: lastFourteenDays().map((day) => ({
+          day,
+          views: byDay.get(day)?.views ?? 0,
+          uniques: byDay.get(day)?.uniques ?? 0,
+        })),
+        audiences: audienceRows.map((row) => ({
+          name: row.name,
+          remark: row.remark,
+          title: row.title,
+          serial: row.serial,
+          at: asIso(row.created_at),
+        })),
+        decrees: decreeRows.map((row) => ({
+          text: row.body,
+          at: asIso(row.created_at),
+        })),
+      },
     };
   },
 );
