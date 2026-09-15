@@ -42,7 +42,11 @@ async function main() {
     return;
   }
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 1,
+    connectionTimeoutMillis: 8_000,
+  });
   const client = await pool.connect();
   try {
     await client.query(
@@ -81,6 +85,21 @@ async function main() {
 }
 
 main().catch((err) => {
+  const code = err?.code;
+  const unreachable =
+    code === "ETIMEDOUT" ||
+    code === "ENETUNREACH" ||
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    err?.errors?.some?.((inner) =>
+      ["ETIMEDOUT", "ENETUNREACH", "ECONNREFUSED", "ENOTFOUND"].includes(inner?.code),
+    );
+  if (unreachable) {
+    console.warn(
+      "[migrate] database unreachable during build — skipping. Schema applies on the first live request.",
+    );
+    process.exit(0);
+  }
   console.error("[migrate] failed:", err?.message || err);
   // pg errors carry the context needed to debug a bad SQL file.
   for (const key of ["code", "detail", "hint", "position", "where"]) {
@@ -88,3 +107,4 @@ main().catch((err) => {
   }
   process.exit(1);
 });
+

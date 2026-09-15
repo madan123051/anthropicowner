@@ -21,7 +21,7 @@ Environment variables (Project → Settings → Environment Variables):
 | `ADMIN_ID` | Yes | Identity for `/admin` |
 | `ADMIN_PASSWORD` | Yes | Password for `/admin` |
 | `ADMIN_SECRET` | Optional | Signs the admin session cookie. Defaults to `ADMIN_PASSWORD`. |
-| `DATABASE_URL` | For live counts | Neon / Postgres connection string. Without it, visitor totals do not persist. |
+| `DATABASE_URL` | For live counts | A **Neon** (or other Postgres) URL Vercel can reach. Use the pooled Neon string. Google Cloud SQL on port 5432 usually times out from Vercel. |
 
 Firebase keys are not used by this app. After adding env vars, redeploy.
 
